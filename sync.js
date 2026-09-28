@@ -1,74 +1,65 @@
 (function () {
     'use strict';
 
-    // ВСТАВЬ СВОИ ДАННЫЕ В КАВЫЧКИ НИЖЕ:
-    const GITHUB_TOKEN = 'ТВОЙ_GITHUB_TOKEN';
-    const GIST_ID = 'ТВОЙ_GIST_ID';
+    // Твои данные Telegram
+    const TG_TOKEN = '8878679075:AAEq0Onj61U2erDC1aVU4OkY8HFOU5TONjM'; // Вставь токен от BotFather в кавычки
+    const TG_CHAT_ID = '5677630585'; // Вставь свой цифровой ID сюда
 
-    async function getSavedProgress() {
-        try {
-            let response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-                headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
-            });
-            let data = await response.json();
-            if (!data.files || !data.files['sync.json']) return {};
-            return JSON.parse(data.files['sync.json'].content || '{}');
-        } catch (e) {
-            console.error('Lampa Sync Error:', e);
-            return {};
-        }
-    }
+    function sendTelegramNotification(title, season, episode, time) {
+        if (!TG_TOKEN || TG_TOKEN === 'ТВОЙ_ТОКЕН_БОТА') return;
 
-    async function saveProgress(movieKey, timecode) {
-        try {
-            let currentData = await getSavedProgress();
-            currentData[movieKey] = {
-                time: timecode,
-                updated: Date.now()
-            };
+        let text = `🎬 *Lampa: Продолжаем просмотр*\n\n` +
+                   `📌 *${title}*\n` +
+                   `📺 Сезон: ${season} | Серия: ${episode}\n` +
+                   `⏱ Таймкод: ${time}`;
 
-            await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    files: {
-                        'sync.json': {
-                            content: JSON.stringify(currentData, null, 2)
-                        }
+        // Формируем клавиатуру с кнопкой быстрого поиска
+        let replyMarkup = {
+            inline_keyboard: [
+                [
+                    {
+                        text: "🔍 Найти в интернете",
+                        url: `https://www.google.com/search?q=${encodeURIComponent(title + " смотреть онлайн")}`
                     }
-                })
-            });
-        } catch (e) {
-            console.error('Lampa Save Error:', e);
-        }
+                ]
+            ]
+        };
+
+        let url = `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
+        
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TG_CHAT_ID,
+                text: text,
+                parse_mode: 'Markdown',
+                reply_markup: replyMarkup
+            })
+        }).catch(err => console.log('Telegram error:', err));
     }
 
-    Lampa.Player.listener.follow('ready', async function () {
-        let movie = Lampa.Player.data();
-        if (!movie) return;
+    // Перехватываем закрытие плеера или сохранение таймкода в Lampa
+    Lampa.Listener.follow('full', function (e) {
+        if (e.type === 'complated' || e.type === 'time') {
+            let card = e.object.card;
+            if (!card) return;
 
-        let key = (movie.movie.id || movie.movie.title) + '_s' + (movie.season || 0) + '_e' + (movie.episode || 0);
+            let title = card.title || card.name || 'Неизвестно';
+            let season = e.torrent ? (e.torrent.season || '-') : '-';
+            let episode = e.torrent ? (e.torrent.voice_episode || e.torrent.episode || '-') : '-';
+            
+            // Превращаем секунды в формат ММ:СС
+            let currentTime = e.time || 0;
+            let minutes = Math.floor(currentTime / 60);
+            let seconds = Math.floor(currentTime % 60);
+            let timeFormatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
-        let progress = await getSavedProgress();
-        if (progress[key] && progress[key].time > 10) {
-            Lampa.Player.to(progress[key].time);
-            if (window.Lampa && Lampa.Noty) {
-                Lampa.Noty.show('Облачный таймкод: ' + Math.round(progress[key].time) + ' сек.');
-            }
+            // Отправляем уведомление (с защитой от слишком частых спам-запросов)
+            sendTelegramNotification(title, season, episode, timeFormatted);
         }
     });
 
-    Lampa.Player.listener.follow('destroy', function () {
-        let movie = Lampa.Player.data();
-        let currentTime = Lampa.Player.time();
-
-        if (movie && currentTime > 10) {
-            let key = (movie.movie.id || movie.movie.title) + '_s' + (movie.season || 0) + '_e' + (movie.episode || 0);
-            saveProgress(key, currentTime);
-        }
-    });
-
+    console.log('Telegram Sync Plugin Loaded!');
 })();
+
