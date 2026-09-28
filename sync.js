@@ -1,29 +1,13 @@
 (function () {
     'use strict';
 
-    // Твои данные Telegram
-    const TG_TOKEN = '8878679075:AAEq0Onj61U2erDC1aVU4OkY8HFOU5TONjM'; // Вставь токен от BotFather в кавычки
-    const TG_CHAT_ID = '5677630585'; // Вставь свой цифровой ID сюда
+    const TG_TOKEN = '8878679075:AAEq0Onj61U2erDC1aVU4OkY8HFOU5TONjM';
+    const TG_CHAT_ID = '5677630585';
 
-    function sendTelegramNotification(title, season, episode, time) {
-        if (!TG_TOKEN || TG_TOKEN === 'ТВОЙ_ТОКЕН_БОТА') return;
-
-        let text = `🎬 *Lampa: Продолжаем просмотр*\n\n` +
+    function sendTelegramNotification(title, timeFormatted) {
+        let text = `🎬 *Lampa: Просмотр прерван*\n\n` +
                    `📌 *${title}*\n` +
-                   `📺 Сезон: ${season} | Серия: ${episode}\n` +
-                   `⏱ Таймкод: ${time}`;
-
-        // Формируем клавиатуру с кнопкой быстрого поиска
-        let replyMarkup = {
-            inline_keyboard: [
-                [
-                    {
-                        text: "🔍 Найти в интернете",
-                        url: `https://www.google.com/search?q=${encodeURIComponent(title + " смотреть онлайн")}`
-                    }
-                ]
-            ]
-        };
+                   `⏱ Таймкод: ${timeFormatted}`;
 
         let url = `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
         
@@ -33,33 +17,29 @@
             body: JSON.stringify({
                 chat_id: TG_CHAT_ID,
                 text: text,
-                parse_mode: 'Markdown',
-                reply_markup: replyMarkup
+                parse_mode: 'Markdown'
             })
-        }).catch(err => console.log('Telegram error:', err));
+        }).catch(err => console.log('Telegram sync error:', err));
     }
 
-    // Перехватываем закрытие плеера или сохранение таймкода в Lampa
-    Lampa.Listener.follow('full', function (e) {
-        if (e.type === 'complated' || e.type === 'time') {
-            let card = e.object.card;
-            if (!card) return;
+    // Слушаем закрытие плеера Lampa
+    if (window.Lampa && Lampa.Player) {
+        Lampa.Player.listener.follow('destroy', function () {
+            let movie = Lampa.Player.data();
+            let currentTime = Lampa.Player.time();
 
-            let title = card.title || card.name || 'Неизвестно';
-            let season = e.torrent ? (e.torrent.season || '-') : '-';
-            let episode = e.torrent ? (e.torrent.voice_episode || e.torrent.episode || '-') : '-';
-            
-            // Превращаем секунды в формат ММ:СС
-            let currentTime = e.time || 0;
-            let minutes = Math.floor(currentTime / 60);
-            let seconds = Math.floor(currentTime % 60);
-            let timeFormatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            if (movie && currentTime > 10) {
+                let title = movie.movie.title || movie.movie.name || 'Видео';
+                
+                // Переводим секунды в минуты и секунды
+                let minutes = Math.floor(currentTime / 60);
+                let seconds = Math.floor(currentTime % 60);
+                let timeFormatted = `${minutes} мин ${seconds} сек`;
 
-            // Отправляем уведомление (с защитой от слишком частых спам-запросов)
-            sendTelegramNotification(title, season, episode, timeFormatted);
-        }
-    });
+                sendTelegramNotification(title, timeFormatted);
+            }
+        });
+    }
 
-    console.log('Telegram Sync Plugin Loaded!');
+    console.log('Telegram Player Sync Loaded!');
 })();
-
