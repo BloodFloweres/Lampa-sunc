@@ -4,39 +4,38 @@
     const TG_TOKEN = '8878679075:AAEq0Onj61U2erDC1aVU4OkY8HFOU5TONjM';
     const TG_CHAT_ID = '5677630585';
 
-    // Тестовое сообщение сразу при старте Lampa
-    fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            chat_id: TG_CHAT_ID,
-            text: '🟢 *Lampa успешно подключена к боту!*',
-            parse_mode: 'Markdown'
-        })
-    }).catch(err => console.log('Init test error:', err));
+    function sendTelegram(text) {
+        fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TG_CHAT_ID,
+                text: text,
+                parse_mode: 'Markdown'
+            })
+        }).catch(err => console.log('Telegram error:', err));
+    }
 
-    // Слушаем закрытие плеера
+    // Сообщаем при старте, что плагин обновился
+    sendTelegram('🔄 *Плагин Lampa обновился и слушает плеер*');
+
     if (window.Lampa && Lampa.Player) {
         Lampa.Player.listener.follow('destroy', function () {
-            let movie = Lampa.Player.data();
-            let currentTime = Lampa.Player.time();
+            try {
+                // Пытаемся вытащить данные разными путями
+                let time = Lampa.Player.time ? Lampa.Player.time() : 'нет функции time';
+                let info = Lampa.Player.info ? Lampa.Player.info() : {};
+                let data = Lampa.Player.data ? Lampa.Player.data() : {};
+                
+                let debugText = `🛠 *Дебаг закрытия плеера*\n` +
+                                `⏱ Time: \`${JSON.stringify(time)}\`\n` +
+                                `📦 Info: \`${JSON.stringify(info)}\`\n` +
+                                `🗂 Data: \`${JSON.stringify(data)}\``;
 
-            if (movie && currentTime > 10) {
-                let title = movie.movie.title || movie.movie.name || 'Видео';
-                let minutes = Math.floor(currentTime / 60);
-                let seconds = Math.floor(currentTime % 60);
-
-                fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: TG_CHAT_ID,
-                        text: `🎬 *Просмотр прерван*\n📌 *${title}*\n⏱ Таймкод: ${minutes} мин ${seconds} сек`,
-                        parse_mode: 'Markdown'
-                    })
-                });
+                sendTelegram(debugText);
+            } catch (e) {
+                sendTelegram(`❌ Ошибка дебага: ${e.message}`);
             }
         });
     }
-    console.log('Telegram Sync Loaded with Test!');
 })();
