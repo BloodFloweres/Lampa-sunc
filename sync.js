@@ -16,63 +16,67 @@
         }).catch(err => console.log('Telegram error:', err));
     }
 
-    // Внедряем кнопку в плеер Lampa
-    function addTelegramButton() {
-        if (!window.Lampa || !Lampa.Player) return;
+    // Добавляем кнопку в карточку фильма/сериала
+    function addCardButton() {
+        if (!window.Lampa) return;
 
-        // Перехватываем момент запуска/открытия интерфейса плеера
-        Lampa.Player.listener.follow('ready', function () {
-            // Проверяем, не создана ли кнопка уже
-            if ($('.telegram-sync-btn').length > 0) return;
-
-            // Создаем HTML-элемент кнопки в стиле Lampa
-            let btn = $(`
-                <div class="player-panel__button selector" title="Отправить таймкод в Telegram" style="display: flex; align-items: center; justify-content: center; margin-left: 10px; cursor: pointer;">
-                    <svg height="24" viewBox="0 0 24 24" width="24" fill="#ffffff">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.73-.53.36-1.01.54-1.44.53-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.35-.49.96-.75 3.78-1.65 6.31-2.74 7.59-3.27 3.61-1.51 4.36-1.77 4.85-1.78.11 0 .35.03.5.15.13.11.17.26.19.37.02.11.03.35.01.55z"/>
-                    </svg>
-                </div>
-            `);
-
-            // При клике на кнопку считываем текущие данные и шлем в телегу
-            btn.on('click hover:enter', function () {
-                let time = Lampa.Player.time ? Lampa.Player.time() : 0;
-                let info = Lampa.Player.info ? Lampa.Player.info() : {};
+        Lampa.Listener.follow('full', function (e) {
+            if (e.type === 'ready') {
+                let render = e.object.activity.render();
                 
-                let title = info.title || info.name || 'Видео';
-                let season = info.season ? `Сезон: ${info.season}` : '';
-                let episode = info.episode ? `Серия: ${info.episode}` : '';
+                // Проверяем, чтобы кнопка не дублировалась
+                if (render.find('.telegram-card-btn').length > 0) return;
 
-                // Форматируем время в ММ:СС
-                let minutes = Math.floor(time / 60);
-                let seconds = Math.floor(time % 60);
-                let timeFormatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                // Создаем кнопку в стиле Lampa (например, рядом с кнопкой «Смотреть» или «Трейлер»)
+                let btn = $(`
+                    <div class="view--torrent selector telegram-card-btn" style="background: rgba(0, 136, 204, 0.2); display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 8px; cursor: pointer;">
+                        <svg height="20" viewBox="0 0 24 24" width="20" fill="#0088cc">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.73-.53.36-1.01.54-1.44.53-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.35-.49.96-.75 3.78-1.65 6.31-2.74 7.59-3.27 3.61-1.51 4.36-1.77 4.85-1.78.11 0 .35.03.5.15.13.11.17.26.19.37.02.11.03.35.01.55z"/>
+                        </svg>
+                        <span style="color: #fff; font-weight: bold;">Сохранить таймкод в Telegram</span>
+                    </div>
+                `);
 
-                let msg = `📌 *Сохраненный таймкод*\n` +
-                          `🎬 *${title}*\n` +
-                          `${season} ${episode}\n` +
-                          `⏱ Время: *${timeFormatted}*`;
+                btn.on('click hover:enter', function () {
+                    let card = e.object.card;
+                    let title = card.title || card.name || 'Видео';
+                    
+                    // Пытаемся забрать таймкод из истории Lampa для этой карточки
+                    let history = Lampa.Storage.get('history', []);
+                    let found = history.find(item => item.id === card.id);
+                    let timeText = 'Не найден (внешний плеер)';
 
-                sendTelegram(msg);
+                    if (found && found.time) {
+                        let minutes = Math.floor(found.time / 60);
+                        let seconds = Math.floor(found.time % 60);
+                        timeText = `${minutes} мин ${seconds} сек`;
+                    }
 
-                // Визуальный отклик пользователю (на секунду подсветим иконку)
-                btn.css('transform', 'scale(1.2)');
-                setTimeout(() => btn.css('transform', 'scale(1)'), 200);
-            });
+                    let msg = `📌 *Ручной срез таймкода*\n` +
+                              `🎬 *${title}*\n` +
+                              `⏱ Последняя позиция: *${timeText}*`;
 
-            // Добавляем кнопку на панель управления плеера
-            setTimeout(() => {
-                $('.player-panel__body').append(btn);
-            }, 500);
+                    sendTelegram(msg);
+
+                    // Анимация нажатия
+                    btn.css('opacity', '0.5');
+                    setTimeout(() => btn.css('opacity', '1'), 200);
+                });
+
+                // Вставляем кнопку в блок кнопок карточки
+                setTimeout(() => {
+                    render.find('.full--actions').append(btn);
+                }, 300);
+            }
         });
     }
 
-    // Запускаем инициализацию
     if (window.Lampa) {
-        addTelegramButton();
+        addCardButton();
     } else {
-        document.addEventListener('lampa:initialize', addTelegramButton);
+        document.addEventListener('lampa:initialize', addCardButton);
     }
 
-    console.log('Telegram UI Button Plugin Loaded!');
+    console.log('Telegram Card Button Plugin Loaded!');
 })();
+                        
